@@ -1,0 +1,27 @@
+spec_version: 1
+name: oncall-hero
+type: standard
+runtime: docker
+app: server/app.py
+port: 8000
+description: >
+  OnCall Hero simulates production data pipeline incidents.
+  An AI agent acts as an on-call data engineer — reading logs,
+  diagnosing root causes, and applying correct remediation actions.
+tasks:
+  - id: missing_source_file
+    difficulty: easy
+    description: "Filename convention mismatch — FileNotFoundError with distractor"
+    max_steps: 6
+  - id: schema_drift_bigquery
+    difficulty: medium
+    description: "Two simultaneous schema changes + deployment red herring"
+    max_steps: 10
+  - id: cascade_collapse
+    difficulty: hard
+    description: "Bad JOIN cascades to 12 tables — partial rollback + triage"
+    max_steps: 16
+  - id: silent_data_corruption
+    difficulty: extreme
+    description: "Pipeline succeeds but data is garbage — NULL detection"
+    max_steps: 18
