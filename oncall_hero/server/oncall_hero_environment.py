@@ -5,10 +5,11 @@
 # LICENSE file in the root directory of this source tree.
 
 """
-Oncall Hero Environment Implementation.
+OnCall Hero Environment Implementation.
 
-A simple test environment that echoes back messages sent to it.
-Perfect for testing HTTP server infrastructure.
+Simulates production data pipeline incidents.
+The agent acts as an on-call data engineer: reading logs,
+diagnosing root causes, and applying correct remediation actions.
 """
 
 from uuid import uuid4
@@ -16,89 +17,199 @@ from uuid import uuid4
 from openenv.core.env_server.interfaces import Environment
 from openenv.core.env_server.types import State
 
-try:
-    from ..models import OncallHeroAction, OncallHeroObservation
-except ImportError:
-    from models import OncallHeroAction, OncallHeroObservation
+from oncall_hero.models import OnCallAction, OnCallObservation, OnCallState
 
 
-class OncallHeroEnvironment(Environment):
+class OnCallHeroEnvironment(Environment):
     """
-    A simple echo environment that echoes back messages.
+    OnCall Hero RL environment.
 
-    This environment is designed for testing the HTTP server infrastructure.
-    It maintains minimal state and simply echoes back whatever message it receives.
+    The agent receives an incident alert, investigates the pipeline failure,
+    and applies the correct sequence of remediation actions to restore service.
 
-    Example:
-        >>> env = OncallHeroEnvironment()
-        >>> obs = env.reset()
-        >>> print(obs.echoed_message)  # "Oncall Hero environment ready!"
-        >>>
-        >>> obs = env.step(OncallHeroAction(message="Hello"))
-        >>> print(obs.echoed_message)  # "Hello"
-        >>> print(obs.message_length)  # 5
+    Hidden state (_hidden) tracks all ground-truth information that is not
+    visible to the agent — root causes, remediation flags, scoring state.
     """
 
-    # Enable concurrent WebSocket sessions.
-    # Set to True if your environment isolates state between instances.
-    # When True, multiple WebSocket clients can connect simultaneously, each
-    # getting their own environment instance (when using factory mode in app.py).
     SUPPORTS_CONCURRENT_SESSIONS: bool = True
 
     def __init__(self):
-        """Initialize the oncall_hero environment."""
-        self._state = State(episode_id=str(uuid4()), step_count=0)
-        self._reset_count = 0
+        self._episode_id = str(uuid4())
+        self._step_count = 0
+        self._hidden: dict = {}
 
-    def reset(self) -> OncallHeroObservation:
+    def reset(self, task_id: str = "missing_source_file") -> OnCallObservation:  # type: ignore[override]
         """
-        Reset the environment.
-
-        Returns:
-            OncallHeroObservation with a ready message
-        """
-        self._state = State(episode_id=str(uuid4()), step_count=0)
-        self._reset_count += 1
-
-        return OncallHeroObservation(
-            echoed_message="Oncall Hero environment ready!",
-            message_length=0,
-            done=False,
-            reward=0.0,
-        )
-
-    def step(self, action: OncallHeroAction) -> OncallHeroObservation:  # type: ignore[override]
-        """
-        Execute a step in the environment by echoing the message.
+        Reset the environment for a new episode.
 
         Args:
-            action: OncallHeroAction containing the message to echo
+            task_id: Which scenario to load. Defaults to 'missing_source_file'.
 
         Returns:
-            OncallHeroObservation with the echoed message and its length
+            Initial OnCallObservation for the selected task.
         """
-        self._state.step_count += 1
+        self._episode_id = str(uuid4())
+        self._step_count = 0
 
-        message = action.message
-        length = len(message)
+        self._hidden = {
+            "task_id": task_id,
+            "true_root_cause": None,
+            "pipeline_health": "degraded",
+            "config_fixed": False,
+            "schema_fixed": False,
+            "rollback_applied": False,
+            "rollback_version_correct": False,
+            "rerun_triggered": False,
+            "null_data_detected": False,
+            "verification_done": False,
+            "red_herring_active": True,
+            "current_step": 0,
+            "max_steps": 6,
+            "is_done": False,
+            "terminal_reason": None,
+            "investigation_score": 0.0,
+            "root_cause_score": 0.0,
+            "remediation_score": 0.0,
+            "efficiency_score": 0.0,
+            "sla_score": 0.0,
+            "penalty_total": 0.0,
+            "actions_taken": [],
+            "sla_critical_tables": [],
+            "inspect_logs_called": False,
+            "pipeline_name": "sales_etl_pipeline",
+            "current_obs": {},
+        }
 
-        # Simple reward: longer messages get higher rewards
-        reward = length * 0.1
+        if task_id == "missing_source_file":
+            from oncall_hero.tasks.task_easy import get_initial_observation
 
-        return OncallHeroObservation(
-            echoed_message=message,
-            message_length=length,
-            done=False,
-            reward=reward,
-            metadata={"original_message": message, "step": self._state.step_count},
-        )
+            obs_data = get_initial_observation()
+            self._hidden["true_root_cause"] = "filename_convention_change"
+            self._hidden["max_steps"] = 6
+
+        elif task_id == "schema_drift_bigquery":
+            from oncall_hero.tasks.task_medium import get_initial_observation
+            
+            obs_data = get_initial_observation()
+            self._hidden["true_root_cause"] = "schema_drift"
+            self._hidden["max_steps"] = 10
+
+        elif task_id == "cascade_collapse":
+            from oncall_hero.tasks.task_hard import get_initial_observation
+            
+            obs_data = get_initial_observation()
+            self._hidden["true_root_cause"] = "bad_join_logic"
+            self._hidden["max_steps"] = 16
+
+        elif task_id == "silent_data_corruption":
+            from oncall_hero.tasks.task_extreme import get_initial_observation
+            
+            obs_data = get_initial_observation()
+            self._hidden["true_root_cause"] = "null_price_column"
+            self._hidden["max_steps"] = 18
+
+        else:
+            obs_data = {
+                "task_id": task_id,
+                "error_message": f"Unknown task_id: {task_id}",
+                "steps_remaining": 0,
+            }
+
+        obs_data["done"] = False
+        obs_data["reward"] = 0.0
+        self._hidden["current_obs"] = dict(obs_data)
+
+        return OnCallObservation(**obs_data)
+
+    def step(self, action: OnCallAction) -> OnCallObservation:  # type: ignore[override]
+        """
+        Execute one action in the environment.
+
+        Args:
+            action: OnCallAction from the agent.
+
+        Returns:
+            Updated OnCallObservation with reward and done flag set.
+        """
+        # Auto-initialize if step() called without reset() (stateless HTTP mode).
+        # Multi-step episodes should use the WebSocket/EnvClient path.
+        if not self._hidden:
+            self.reset()
+
+        if self._hidden.get("is_done", False):
+            current = dict(self._hidden.get("current_obs", {}))
+            current["last_action_result"] = "Episode already complete."
+            current["done"] = True
+            current["reward"] = 0.0
+            current["steps_remaining"] = 0
+            return OnCallObservation(**current)
+
+        self._step_count += 1
+        self._hidden["current_step"] = self._hidden.get("current_step", 0) + 1
+
+        task_id = self._hidden.get("task_id", "missing_source_file")
+
+        if task_id == "missing_source_file":
+            from oncall_hero.tasks.task_easy import handle_action
+            obs_updates, reward, done = handle_action(action, self._hidden)
+
+        elif task_id == "schema_drift_bigquery":
+            from oncall_hero.tasks.task_medium import handle_action
+            obs_updates, reward, done = handle_action(action, self._hidden)
+
+        elif task_id == "cascade_collapse":
+            from oncall_hero.tasks.task_hard import handle_action
+            obs_updates, reward, done = handle_action(action, self._hidden)
+
+        elif task_id == "silent_data_corruption":
+            from oncall_hero.tasks.task_extreme import handle_action
+            obs_updates, reward, done = handle_action(action, self._hidden)
+
+        else:
+            obs_updates = {"last_action_result": f"Unknown task: {task_id}"}
+            reward, done = 0.0, True
+
+        self._hidden["actions_taken"].append(action.action_type)
+
+        steps_remaining = max(0, self._hidden["max_steps"] - self._hidden["current_step"])
+        if steps_remaining == 0 and not done:
+            done = True
+            suffix = " [Max steps reached — episode ended]"
+            obs_updates["last_action_result"] = obs_updates.get("last_action_result", "") + suffix
+
+        if done:
+            self._hidden["is_done"] = True
+
+        current = dict(self._hidden.get("current_obs", {}))
+        current.update(obs_updates)
+        current["steps_remaining"] = steps_remaining
+        current["actions_taken"] = list(self._hidden["actions_taken"])
+        current["done"] = done
+        current["reward"] = reward
+        self._hidden["current_obs"] = current
+
+        return OnCallObservation(**current)
 
     @property
     def state(self) -> State:
-        """
-        Get the current environment state.
-
-        Returns:
-            Current State with episode_id and step_count
-        """
-        return self._state
+        """Return current episode state."""
+        kwargs = dict(self._hidden)
+        
+        # Remove internal tracking fields not defined in OnCallState
+        kwargs.pop("current_obs", None)
+        kwargs.pop("current_step", None)
+        kwargs.pop("max_steps", None)
+        kwargs.pop("inspect_logs_called", None)
+        kwargs.pop("pipeline_name", None)
+        
+        # Ensure correct defaults to avoid Pydantic validation errors
+        if kwargs.get("true_root_cause") is None:
+            kwargs["true_root_cause"] = ""
+        if kwargs.get("terminal_reason") is None:
+            kwargs["terminal_reason"] = ""
+            
+        return OnCallState(
+            episode_id=self._episode_id,
+            step_count=self._step_count,
+            **kwargs
+        )

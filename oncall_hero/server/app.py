@@ -5,75 +5,51 @@
 # LICENSE file in the root directory of this source tree.
 
 """
-FastAPI application for the Oncall Hero Environment.
+FastAPI application for the OnCall Hero Environment.
 
-This module creates an HTTP server that exposes the OncallHeroEnvironment
-over HTTP and WebSocket endpoints, compatible with EnvClient.
+Exposes the OnCallHeroEnvironment over HTTP endpoints compatible with EnvClient.
 
 Endpoints:
-    - POST /reset: Reset the environment
+    - POST /reset: Reset the environment and start a new episode
     - POST /step: Execute an action
     - GET /state: Get current environment state
     - GET /schema: Get action/observation schemas
-    - WS /ws: WebSocket endpoint for persistent sessions
+    - GET /health: Health check
 
 Usage:
-    # Development (with auto-reload):
-    uvicorn server.app:app --reload --host 0.0.0.0 --port 8000
+    # Development:
+    cd oncall_hero && uv run server
 
     # Production:
     uvicorn server.app:app --host 0.0.0.0 --port 8000 --workers 4
-
-    # Or run directly:
-    python -m server.app
 """
 
 try:
     from openenv.core.env_server.http_server import create_app
 except Exception as e:  # pragma: no cover
     raise ImportError(
-        "openenv is required for the web interface. Install dependencies with '\n    uv sync\n'"
+        "openenv is required. Install dependencies with '\n    uv sync\n'"
     ) from e
 
-try:
-    from ..models import OncallHeroAction, OncallHeroObservation
-    from .oncall_hero_environment import OncallHeroEnvironment
-except ModuleNotFoundError:
-    from models import OncallHeroAction, OncallHeroObservation
-    from server.oncall_hero_environment import OncallHeroEnvironment
+from oncall_hero.models import OnCallAction, OnCallObservation
+from oncall_hero.server.oncall_hero_environment import OnCallHeroEnvironment
 
 
-# Create the app with web interface and README integration
 app = create_app(
-    OncallHeroEnvironment,
-    OncallHeroAction,
-    OncallHeroObservation,
+    OnCallHeroEnvironment,
+    OnCallAction,
+    OnCallObservation,
     env_name="oncall_hero",
-    max_concurrent_envs=1,  # increase this number to allow more concurrent WebSocket sessions
+    max_concurrent_envs=1,
 )
 
 
 def main(host: str = "0.0.0.0", port: int = 8000):
-    """
-    Entry point for direct execution via uv run or python -m.
-
-    This function enables running the server without Docker:
-        uv run --project . server
-        uv run --project . server --port 8001
-        python -m oncall_hero.server.app
-
-    Args:
-        host: Host address to bind to (default: "0.0.0.0")
-        port: Port number to listen on (default: 8000)
-
-    For production deployments, consider using uvicorn directly with
-    multiple workers:
-        uvicorn oncall_hero.server.app:app --workers 4
-    """
+    """Entry point for direct execution via uv run or python -m."""
     import uvicorn
 
     uvicorn.run(app, host=host, port=port)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
