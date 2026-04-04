@@ -4,7 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Oncall Hero Environment Client."""
+"""OnCall Hero Environment Client."""
 
 from typing import Dict
 
@@ -12,70 +12,44 @@ from openenv.core import EnvClient
 from openenv.core.client_types import StepResult
 from openenv.core.env_server.types import State
 
-from .models import OncallHeroAction, OncallHeroObservation
+from oncall_hero.models import OnCallAction, OnCallObservation
 
 
-class OncallHeroEnv(
-    EnvClient[OncallHeroAction, OncallHeroObservation, State]
+class OnCallHeroEnv(
+    EnvClient[OnCallAction, OnCallObservation, State]
 ):
     """
-    Client for the Oncall Hero Environment.
+    Client for the OnCall Hero Environment.
 
-    This client maintains a persistent WebSocket connection to the environment server,
-    enabling efficient multi-step interactions with lower latency.
-    Each client instance has its own dedicated environment session on the server.
+    Maintains a persistent WebSocket connection to the environment server,
+    enabling efficient multi-step interactions.
 
     Example:
-        >>> # Connect to a running server
-        >>> with OncallHeroEnv(base_url="http://localhost:8000") as client:
-        ...     result = client.reset()
-        ...     print(result.observation.echoed_message)
+        >>> with OnCallHeroEnv(base_url="http://localhost:8000") as client:
+        ...     result = client.reset(task_id="missing_source_file")
+        ...     print(result.observation.error_message)
         ...
-        ...     result = client.step(OncallHeroAction(message="Hello!"))
-        ...     print(result.observation.echoed_message)
-
-    Example with Docker:
-        >>> # Automatically start container and connect
-        >>> client = OncallHeroEnv.from_docker_image("oncall_hero-env:latest")
-        >>> try:
-        ...     result = client.reset()
-        ...     result = client.step(OncallHeroAction(message="Test"))
-        ... finally:
-        ...     client.close()
+        ...     result = client.step(OnCallAction(
+        ...         action_type="inspect_logs",
+        ...         target="extract_s3_sales",
+        ...         justification="Check what failed"
+        ...     ))
+        ...     print(result.observation.log_details)
     """
 
-    def _step_payload(self, action: OncallHeroAction) -> Dict:
-        """
-        Convert OncallHeroAction to JSON payload for step message.
-
-        Args:
-            action: OncallHeroAction instance
-
-        Returns:
-            Dictionary representation suitable for JSON encoding
-        """
+    def _step_payload(self, action: OnCallAction) -> Dict:
+        """Convert OnCallAction to JSON payload for the step endpoint."""
         return {
-            "message": action.message,
+            "action_type": action.action_type,
+            "target": action.target,
+            "parameters": action.parameters,
+            "justification": action.justification,
         }
 
-    def _parse_result(self, payload: Dict) -> StepResult[OncallHeroObservation]:
-        """
-        Parse server response into StepResult[OncallHeroObservation].
-
-        Args:
-            payload: JSON response data from server
-
-        Returns:
-            StepResult with OncallHeroObservation
-        """
+    def _parse_result(self, payload: Dict) -> StepResult[OnCallObservation]:
+        """Parse server step response into StepResult[OnCallObservation]."""
         obs_data = payload.get("observation", {})
-        observation = OncallHeroObservation(
-            echoed_message=obs_data.get("echoed_message", ""),
-            message_length=obs_data.get("message_length", 0),
-            done=payload.get("done", False),
-            reward=payload.get("reward"),
-            metadata=obs_data.get("metadata", {}),
-        )
+        observation = OnCallObservation(**obs_data)
 
         return StepResult(
             observation=observation,
@@ -84,16 +58,8 @@ class OncallHeroEnv(
         )
 
     def _parse_state(self, payload: Dict) -> State:
-        """
-        Parse server response into State object.
-
-        Args:
-            payload: JSON response from state request
-
-        Returns:
-            State object with episode_id and step_count
-        """
+        """Parse server state response into State object."""
         return State(
-            episode_id=payload.get("episode_id"),
+            episode_id=payload.get("episode_id", ""),
             step_count=payload.get("step_count", 0),
         )

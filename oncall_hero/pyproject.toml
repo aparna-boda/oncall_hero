@@ -41,5 +41,5 @@ server = "oncall_hero.server.app:main"
 
 [tool.setuptools]
 include-package-data = true
-packages = ["oncall_hero", "oncall_hero.server"]
-package-dir = { "oncall_hero" = ".", "oncall_hero.server" = "server" }
+packages = ["oncall_hero", "oncall_hero.server", "oncall_hero.tasks"]
+package-dir = { "oncall_hero" = ".", "oncall_hero.server" = "server", "oncall_hero.tasks" = "tasks" }
