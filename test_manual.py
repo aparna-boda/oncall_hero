@@ -14,8 +14,11 @@ Tests each task with its optimal action sequence and verifies:
   - Final grader score reaches ~0.95-1.00
 """
 
+import copy
+
 from oncall_hero.models import OnCallAction
 from oncall_hero.graders import grade
+from oncall_hero.rewards import compute_step_reward
 from oncall_hero.tasks import task_easy, task_medium, task_hard, task_extreme
 
 
@@ -23,17 +26,24 @@ def act(action_type, target="pipeline", **params):
     return OnCallAction(action_type=action_type, target=target, parameters=params)
 
 
-def run_task(label, module, actions):
+def run_task(label, module, actions, task_id=None):
     print(f"\n{'=' * 55}")
     print(f"  {label}")
     print("=" * 55)
 
     obs = module.get_initial_observation()
+    if task_id is None:
+        task_id = obs.get("task_id", label)
     hidden = {}
     rewards = []
 
     for i, a in enumerate(actions, 1):
-        updates, reward, done = module.handle_action(a, hidden)
+        hidden_before = copy.deepcopy(hidden)
+        updates, done = module.handle_action(a, hidden)
+        reward = compute_step_reward(
+            a.action_type, a.target, a.parameters,
+            hidden_before, hidden, task_id, done,
+        )
         obs.update(updates)
         rewards.append(reward)
 
@@ -52,7 +62,6 @@ def run_task(label, module, actions):
         if done:
             break
 
-    task_id = obs.get("task_id", label)
     actions_taken = [a.action_type for a in actions[: len(rewards)]]
     raw = sum(rewards)
     final = grade(task_id, actions_taken, hidden)
@@ -79,6 +88,7 @@ if __name__ == "__main__":
             act("fix_pipeline_config"),
             act("trigger_rerun"),
         ],
+        task_id="missing_source_file",
     )
 
     # ------------------------------------------------------------------ #
@@ -95,6 +105,7 @@ if __name__ == "__main__":
             act("alter_table", column="quantity", type="BIGINT"),
             act("trigger_rerun"),
         ],
+        task_id="schema_drift_bigquery",
     )
 
     # ------------------------------------------------------------------ #
@@ -114,6 +125,7 @@ if __name__ == "__main__":
             act("trigger_rerun", target="marketing_segments"),
             act("notify_stakeholder", team="sla_team"),
         ],
+        task_id="cascade_collapse",
     )
 
     # ------------------------------------------------------------------ #
@@ -133,6 +145,7 @@ if __name__ == "__main__":
             act("notify_stakeholder", team="revenue_team"),
             act("notify_stakeholder", team="crm_team"),
         ],
+        task_id="silent_data_corruption",
     )
 
     # ================================================================== #
@@ -147,6 +160,7 @@ if __name__ == "__main__":
             act("trigger_rerun"),
             act("fix_pipeline_config"),
         ],
+        task_id="missing_source_file",
     )
 
     scores["trap_t2_destructive"] = run_task(
@@ -157,6 +171,7 @@ if __name__ == "__main__":
             act("check_schema"),
             act("rollback_deployment", version="2.3.0"),
         ],
+        task_id="schema_drift_bigquery",
     )
 
     scores["trap_t3_toxic_branch"] = run_task(
@@ -167,6 +182,7 @@ if __name__ == "__main__":
             act("rollback_deployment", version="3.1.1"),
             act("trigger_rerun", target="revenue_daily"),
         ],
+        task_id="cascade_collapse",
     )
 
     scores["trap_t3_wrong_sla"] = run_task(
@@ -179,6 +195,7 @@ if __name__ == "__main__":
             act("trigger_rerun", target="customer_summary"),
             act("trigger_rerun", target="revenue_daily"),
         ],
+        task_id="cascade_collapse",
     )
 
     scores["trap_t4_gullible"] = run_task(
@@ -188,6 +205,7 @@ if __name__ == "__main__":
             act("inspect_logs"),
             # Agent theoretically stops here because logs say "SUCCESS"
         ],
+        task_id="silent_data_corruption",
     )
 
     # ------------------------------------------------------------------ #

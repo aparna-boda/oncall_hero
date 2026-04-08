@@ -12,12 +12,14 @@ The agent acts as an on-call data engineer: reading logs,
 diagnosing root causes, and applying correct remediation actions.
 """
 
+import copy
 from uuid import uuid4
 
 from openenv.core.env_server.interfaces import Environment
 from openenv.core.env_server.types import State
 
 from oncall_hero.models import OnCallAction, OnCallObservation, OnCallState
+from oncall_hero.rewards import compute_step_reward
 
 
 class OnCallHeroEnvironment(Environment):
@@ -149,25 +151,38 @@ class OnCallHeroEnvironment(Environment):
 
         task_id = self._hidden.get("task_id", "missing_source_file")
 
+        # Snapshot hidden state BEFORE mutation so rewards.py can compare transitions.
+        hidden_before = copy.deepcopy(self._hidden)
+
         if task_id == "missing_source_file":
             from oncall_hero.tasks.task_easy import handle_action
-            obs_updates, reward, done = handle_action(action, self._hidden)
+            obs_updates, done = handle_action(action, self._hidden)
 
         elif task_id == "schema_drift_bigquery":
             from oncall_hero.tasks.task_medium import handle_action
-            obs_updates, reward, done = handle_action(action, self._hidden)
+            obs_updates, done = handle_action(action, self._hidden)
 
         elif task_id == "cascade_collapse":
             from oncall_hero.tasks.task_hard import handle_action
-            obs_updates, reward, done = handle_action(action, self._hidden)
+            obs_updates, done = handle_action(action, self._hidden)
 
         elif task_id == "silent_data_corruption":
             from oncall_hero.tasks.task_extreme import handle_action
-            obs_updates, reward, done = handle_action(action, self._hidden)
+            obs_updates, done = handle_action(action, self._hidden)
 
         else:
             obs_updates = {"last_action_result": f"Unknown task: {task_id}"}
-            reward, done = 0.0, True
+            done = True
+
+        reward = compute_step_reward(
+            action.action_type,
+            action.target,
+            action.parameters,
+            hidden_before,
+            self._hidden,
+            task_id,
+            done,
+        )
 
         self._hidden["actions_taken"].append(action.action_type)
 

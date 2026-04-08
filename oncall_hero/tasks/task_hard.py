@@ -16,9 +16,8 @@ Scenario:
     Traps:        Rolling back to 3.1.1 is unsafe (NULL bug). Must rollback to 3.1.0 and trigger 3 SLA reruns in order.
 """
 
-from typing import Dict, Tuple
-
 from oncall_hero.models import OnCallAction
+
 
 def get_initial_observation() -> dict:
     return {
@@ -58,22 +57,28 @@ def get_initial_observation() -> dict:
     }
 
 
-def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool]:
+def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, bool]:
+    """
+    Handle one agent action for Task 3.
+
+    Mutates hidden state and returns observation updates.
+    Reward is computed separately by rewards.compute_step_reward().
+
+    Returns:
+        (observation_updates, done)
+    """
     action_type = action.action_type
     params = action.parameters
     updates: dict = {}
-    reward = 0.0
     done = False
 
     # Initialize tracking variables
     if "t3_rollback_target" not in hidden:
-        # T3 hidden state keys
         hidden["t3_rollback_target"] = None
         hidden["t3_tables_rerun"] = []
         hidden["t3_notified_teams"] = set()
-        
+
     if action_type == "inspect_logs":
-        reward = 0.08
         hidden["inspect_logs_called"] = True
         updates["deployment_history"] = [
             {"version": "3.1.2", "deployed_at": "Today 08:00 AM", "known_issues": "Current - bad JOIN suspected"},
@@ -88,7 +93,6 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool
         updates["last_action_result"] = "Logs inspected. Deployment history and OOM warning revealed."
 
     elif action_type == "check_dependencies":
-        reward = 0.08
         hidden["check_dependencies_called"] = True
         hidden["sla_critical_tables"] = ["revenue_daily", "customer_summary", "marketing_segments"]
         updates["dependency_map"] = {
@@ -104,7 +108,6 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool
         )
 
     elif action_type == "check_resource_utilization":
-        reward = 0.06
         updates["resource_metrics"] = {
             "db_cpu": "15%",
             "db_memory": "40%",
@@ -116,7 +119,6 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool
         )
 
     elif action_type == "profile_data":
-        reward = 0.08
         updates["data_profile"] = {
             "customer_master.customer_id": "duplicate rate = 15.2% (expected 0%)",
             "revenue_daily.amount": "NULL rate = 0%"
@@ -124,20 +126,16 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool
         updates["last_action_result"] = "Data profiling confirms bad JOIN causing duplicate customer_ids."
 
     elif action_type == "check_schema":
-        reward = -0.05
         updates["last_action_result"] = "Schema is unchanged."
 
     elif action_type == "alter_table":
         target = action.target
         if target == "orders_archive":
-            reward = -0.30
             updates["last_action_result"] = "Altered orders_archive. This is a red herring and didn't fix the root cause."
         else:
-            reward = -0.20
             updates["last_action_result"] = f"Altered {target}. Incorrect approach."
 
     elif action_type == "scale_up_executor":
-        reward = -0.20
         updates["last_action_result"] = (
             "Scaled up executor for ads_spend. "
             "WARNING: This wastes time while SLA breaches worsen. Did not resolve the analytics bad JOIN."
@@ -146,13 +144,11 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool
     elif action_type == "rollback_deployment":
         version = params.get("version", "")
         if version == "3.1.0":
-            reward = 0.20
             hidden["rollback_applied"] = True
             hidden["rollback_version_correct"] = True
             hidden["t3_rollback_target"] = "3.1.0"
             updates["last_action_result"] = "Rolled back to 3.1.0. Code is now historically stable."
         elif version == "3.1.1":
-            reward = -0.40
             hidden["rollback_applied"] = True
             hidden["rollback_version_correct"] = False
             hidden["t3_rollback_target"] = "3.1.1"
@@ -161,23 +157,19 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool
                 "\nCATASTROPHIC ERROR: Version 3.1.1 contains the known NULL bug. Data is corrupting worse now."
             )
         else:
-            reward = -0.10
             updates["last_action_result"] = f"Rollback to unknown or unstated version {version}."
 
     elif action_type == "trigger_rerun":
         if not hidden.get("rollback_applied"):
-            reward = -0.30 # Triggering rerun before rollback
             updates["last_action_result"] = "Triggered rerun on bad code. Duplicates propagated further."
-            return updates, reward, done
+            return updates, done
 
         if not hidden.get("rollback_version_correct"):
-            reward = -0.30 # Triggering rerun on 3.1.1
             updates["last_action_result"] = "Triggered rerun on version 3.1.1. NULL data cascading down."
-            return updates, reward, done
+            return updates, done
 
         target = action.target
-        if target == "all" or target == "customer_master":
-            reward = -0.20
+        if target in ("all", "customer_master"):
             updates["last_action_result"] = (
                 "Triggered rerun on all 12 tables. "
                 "WARNING: Processing queue overloaded. SLA tables delayed further."
@@ -185,17 +177,12 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool
         elif target in ["revenue_daily", "customer_summary", "marketing_segments"]:
             hidden["t3_tables_rerun"].append(target)
             expected_order = ["revenue_daily", "customer_summary", "marketing_segments"]
-            
-            # Check sequential order
             current_idx = len(hidden["t3_tables_rerun"]) - 1
             if current_idx < 3 and hidden["t3_tables_rerun"][current_idx] != expected_order[current_idx]:
-                reward = -0.30
                 hidden["rerun_order_correct"] = False
                 updates["last_action_result"] = f"Rerun {target} out of order. Higher SLA priorities ignored!"
             else:
-                reward = 0.18
                 updates["last_action_result"] = f"Rerun {target} successful."
-                
                 if hidden["t3_tables_rerun"] == expected_order:
                     hidden["rerun_triggered"] = True
                     hidden["rerun_order_correct"] = True
@@ -208,50 +195,39 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool
                     }
                     updates["last_action_result"] = "All 3 SLA-critical tables rerun successfully in exact order."
         else:
-            reward = -0.10
             updates["last_action_result"] = f"Triggered rerun on {target}, but SLA tables are still waiting."
 
     elif action_type == "notify_stakeholder":
         team = params.get("team", "").lower()
-        if "sla" in team or "analytics" in team or "business" in team:
+        if any(k in team for k in ("sla", "analytics", "business")):
             if "sla" not in hidden["t3_notified_teams"]:
-                reward = 0.10
                 hidden["t3_notified_teams"].add("sla")
                 updates["last_action_result"] = f"Notified {team} team about SLA status."
             else:
                 updates["last_action_result"] = f"Already notified {team} team."
         elif "ads" in team:
             if "ads" not in hidden["t3_notified_teams"]:
-                reward = 0.10
                 hidden["t3_notified_teams"].add("ads")
                 updates["last_action_result"] = "Notified ads team about the standalone OOM issue."
             else:
                 updates["last_action_result"] = "Already notified ads team."
         else:
-            reward = 0.0
             updates["last_action_result"] = f"Notified {team}."
 
     elif action_type == "skip_task":
         if action.target in hidden.get("sla_critical_tables", []):
-            reward = -0.30
             updates["last_action_result"] = "FATAL: Skipped an SLA critical table. Irrecoverable data loss for reporting."
         else:
-            reward = 0.0
             updates["last_action_result"] = f"Skipped {action.target}."
 
     elif action_type == "fix_pipeline_config":
-        reward = -0.05
         updates["last_action_result"] = "Pipeline config wasn't the issue."
 
     else:
-        reward = 0.0
         updates["last_action_result"] = f"Unknown or invalid action: {action_type}."
 
-    # Check for resolution done correctly
+    # Check for resolution
     if hidden.get("rerun_triggered") and "sla" in hidden["t3_notified_teams"]:
-        # "ads" team notification is bonus / supplementary but we allow them to finish it up.
-        # But if they've restored the pipeline, we can mark done.
-        # Actually PRD says "done when pipeline restored and correct fix applied"
         done = True
 
-    return updates, reward, done
+    return updates, done

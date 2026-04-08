@@ -58,20 +58,21 @@ def get_initial_observation() -> dict:
     }
 
 
-def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool]:
+def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, bool]:
     """
     Handle one agent action for Task 1.
 
+    Mutates hidden state and returns observation updates.
+    Reward is computed separately by rewards.compute_step_reward().
+
     Returns:
-        (observation_updates, reward, done)
+        (observation_updates, done)
     """
     action_type = action.action_type
     updates: dict = {}
-    reward = 0.0
     done = False
 
     if action_type == "inspect_logs":
-        reward = 0.05
         hidden["inspect_logs_called"] = True
         updates["log_details"] = (
             "[ERROR] 2024-04-01 02:14:33 - Task: extract_s3_sales - Status: FAILED\n"
@@ -99,7 +100,6 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool
 
     elif action_type == "fix_pipeline_config":
         if hidden.get("inspect_logs_called"):
-            reward = 0.25
             hidden["config_fixed"] = True
             updates["last_action_result"] = (
                 "Pipeline config updated successfully. "
@@ -107,7 +107,6 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool
                 "Config saved and validated."
             )
         else:
-            reward = -0.05
             updates["last_action_result"] = (
                 "Error: Cannot apply fix without diagnosing the root cause first. "
                 "Inspect logs to identify what needs to be fixed."
@@ -115,7 +114,6 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool
 
     elif action_type == "trigger_rerun":
         if hidden.get("config_fixed"):
-            reward = 0.65
             done = True
             hidden["rerun_triggered"] = True
             hidden["pipeline_health"] = "restored"
@@ -132,7 +130,6 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool
                 "load_bigquery": "success",
             }
         else:
-            reward = -0.30
             updates["last_action_result"] = (
                 "Pipeline failed again. "
                 "FileNotFoundError: s3://prod-bucket/sales/sales_2024-04-01.csv not found. "
@@ -140,7 +137,6 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool
             )
 
     elif action_type == "check_schema":
-        reward = -0.05
         updates["source_schema"] = [
             {"column": "sale_id", "type": "INT64", "nullable": False},
             {"column": "product_id", "type": "INT64", "nullable": False},
@@ -159,7 +155,6 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool
         )
 
     elif action_type == "check_dependencies":
-        reward = -0.05
         updates["dependency_map"] = {
             "extract_s3_sales": {
                 "upstream": [],
@@ -183,7 +178,6 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool
         )
 
     elif action_type == "check_resource_utilization":
-        reward = -0.05
         updates["resource_metrics"] = {
             "cpu_usage_pct": 22.4,
             "memory_usage_pct": 41.1,
@@ -198,14 +192,12 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool
         )
 
     elif action_type == "profile_data":
-        reward = -0.05
         updates["last_action_result"] = (
             "Cannot profile data — pipeline failed before any data was loaded. "
             "No data available to profile."
         )
 
     elif action_type == "scale_up_executor":
-        reward = -0.10
         updates["last_action_result"] = (
             "Executor pool scaled up from 10 to 15 nodes. "
             "However, this did not resolve the failure. "
@@ -213,28 +205,24 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool
         )
 
     elif action_type == "rollback_deployment":
-        reward = -0.10
         updates["last_action_result"] = (
             "No recent deployment found for sales_etl_pipeline (last deploy: 2024-03-15). "
             "Rollback is not applicable — this is not a deployment issue."
         )
 
     elif action_type == "alter_table":
-        reward = -0.10
         updates["last_action_result"] = (
             "Table alteration attempted but no schema change is needed. "
             "Source and target schemas are compatible — this action was not required."
         )
 
     elif action_type == "notify_stakeholder":
-        reward = 0.0
         updates["last_action_result"] = (
             "Stakeholders notified of the sales_etl_pipeline incident. "
             "Ticket INC-20240401-001 updated. Awaiting resolution."
         )
 
     elif action_type == "skip_task":
-        reward = -0.30
         done = True
         updates["last_action_result"] = (
             "Task skipped. Pipeline left in failed state. "
@@ -243,7 +231,6 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool
         )
 
     else:
-        reward = 0.0
         updates["last_action_result"] = f"Unknown action type: '{action_type}'"
 
-    return updates, reward, done
+    return updates, done

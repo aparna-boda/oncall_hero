@@ -9,9 +9,6 @@ import textwrap
 from typing import List, Optional
 
 from openai import OpenAI
-from dotenv import load_dotenv
-
-load_dotenv() # Load variables from .env!
 
 from oncall_hero.client import OnCallHeroEnv
 from oncall_hero.models import OnCallAction

@@ -53,17 +53,19 @@ def get_initial_observation() -> dict:
     }
 
 
-def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool]:
+def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, bool]:
     """
     Handle one agent action for Task 2.
 
+    Mutates hidden state and returns observation updates.
+    Reward is computed separately by rewards.compute_step_reward().
+
     Returns:
-        (observation_updates, reward, done)
+        (observation_updates, done)
     """
     action_type = action.action_type
     params = action.parameters
     updates: dict = {}
-    reward = 0.0
     done = False
 
     # Initialize task-specific hidden fields if not present
@@ -72,7 +74,6 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool
         hidden["t2_quantity_fixed"] = False
 
     if action_type == "inspect_logs":
-        reward = 0.10
         hidden["inspect_logs_called"] = True
         updates["log_details"] = (
             "[ERROR] 2024-04-01 08:35:12 - load_bigquery_inventory - FAILED\n"
@@ -89,7 +90,6 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool
         )
 
     elif action_type == "check_schema":
-        reward = 0.10
         hidden["check_schema_called"] = True
         updates["source_schema"] = [
             {"column": "product_id", "type": "STRING", "nullable": False},
@@ -99,16 +99,12 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool
         updates["target_schema"] = [
             {"column": "product_id", "type": "STRING", "nullable": False},
         ]
-        
-        # Build current target schema dynamically based on alterations
         if hidden["t2_quantity_fixed"]:
             updates["target_schema"].append({"column": "quantity", "type": "BIGINT", "nullable": False})
         else:
             updates["target_schema"].append({"column": "quantity", "type": "INT", "nullable": False})
-            
         if hidden["t2_discount_added"]:
             updates["target_schema"].append({"column": "discount_pct", "type": "FLOAT", "nullable": True})
-            
         updates["last_action_result"] = (
             "Schema comparison complete. "
             "Difference identified between source (CSV) and target (BigQuery)."
@@ -116,45 +112,36 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool
 
     elif action_type == "alter_table":
         if not hidden.get("check_schema_called"):
-            reward = -0.10
             updates["last_action_result"] = "Error: You must call check_schema before altering the table."
-            return updates, reward, done
+            return updates, done
 
         col = params.get("column", "").lower()
         typ = params.get("type", "").upper()
 
         if col == "discount_pct":
-            if typ == "FLOAT" or typ == "FLOAT64":
+            if typ in ("FLOAT", "FLOAT64"):
                 if not hidden["t2_discount_added"]:
-                    reward = 0.15
                     hidden["t2_discount_added"] = True
                     updates["last_action_result"] = "Table altered: discount_pct added as FLOAT."
                 else:
                     updates["last_action_result"] = "Column discount_pct already added."
             else:
-                reward = -0.10
                 updates["last_action_result"] = f"Table alter failed: Incorrect type {typ} for discount_pct."
-                
         elif col == "quantity":
-            if typ == "BIGINT" or typ == "INT64":
+            if typ in ("BIGINT", "INT64"):
                 if not hidden["t2_quantity_fixed"]:
-                    reward = 0.15
                     hidden["t2_quantity_fixed"] = True
                     updates["last_action_result"] = "Table altered: quantity type changed to BIGINT."
                 else:
                     updates["last_action_result"] = "Column quantity is already BIGINT."
-            elif typ in ["INT", "INTEGER", "INT32"]:
-                reward = -0.30
+            elif typ in ("INT", "INTEGER", "INT32"):
                 updates["last_action_result"] = "Table alter failed: Cannot change type to INT. It needs to fit the new larger capacity."
             else:
-                reward = -0.10
                 updates["last_action_result"] = f"Table alter failed: Incorrect type {typ} for quantity."
         else:
-            reward = -0.10
             updates["last_action_result"] = f"Table alter failed: Unknown column {col}."
 
     elif action_type == "rollback_deployment":
-        reward = -0.40  # Massive penalty for falling for the red herring
         updates["last_action_result"] = (
             "Deployment rolled back to 2.3.0. "
             "WARNING: This reverted critical unrelated hotfixes. "
@@ -163,7 +150,6 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool
 
     elif action_type == "trigger_rerun":
         if hidden["t2_discount_added"] and hidden["t2_quantity_fixed"]:
-            reward = 0.55
             done = True
             hidden["pipeline_health"] = "restored"
             hidden["schema_fixed"] = True
@@ -179,7 +165,6 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool
                 "Both schema drift issues successfully mitigated. Pipeline is heavily restored."
             )
         else:
-            reward = -0.20
             updates["last_action_result"] = (
                 "Pipeline failed again. "
                 "BigQuery Error: Schema mismatch during load job. "
@@ -187,32 +172,25 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, float, bool
             )
 
     elif action_type == "check_dependencies":
-        reward = -0.05
         updates["last_action_result"] = "Dependencies checked. No systemic downstream impact yet."
 
     elif action_type == "check_resource_utilization":
-        reward = -0.05
         updates["last_action_result"] = "Resource utilization is normal."
 
     elif action_type == "scale_up_executor":
-        reward = -0.10
         updates["last_action_result"] = "Scaled up executors. Had no effect on the load schema error."
 
     elif action_type == "profile_data":
-        reward = -0.05
         updates["last_action_result"] = "Cannot profile data; pipeline failed before write."
 
     elif action_type == "notify_stakeholder":
-        reward = 0.0
         updates["last_action_result"] = "Stakeholder notified."
 
     elif action_type == "skip_task":
-        reward = -0.30
         done = True
         updates["last_action_result"] = "Task skipped. Final pipeline state is broken due to missing data."
 
     else:
-        reward = 0.0
         updates["last_action_result"] = f"Unknown or invalid action for this task: {action_type}."
 
-    return updates, reward, done
+    return updates, done
