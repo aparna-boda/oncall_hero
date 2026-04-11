@@ -164,7 +164,8 @@ async def run_task(task_id: str, client: OpenAI, env: OnCallHeroEnv) -> None:
 
             result = await env.step(action)
             obs = result.observation
-            reward = result.reward or 0.0
+            reward = result.reward if result.reward is not None else 0.01
+            reward = max(0.01, min(0.99, reward))  # strictly in (0.01, 0.99) for all steps
             done = result.done
             rewards.append(reward)
 
