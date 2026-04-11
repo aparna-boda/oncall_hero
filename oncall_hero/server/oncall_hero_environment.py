@@ -139,10 +139,13 @@ class OnCallHeroEnvironment(Environment):
             self.reset()
 
         if self._hidden.get("is_done", False):
+            from oncall_hero.graders import grade
+            task_id_done = self._hidden.get("task_id", "missing_source_file")
+            final_score = grade(task_id_done, list(self._hidden.get("actions_taken", [])), self._hidden)
             current = dict(self._hidden.get("current_obs", {}))
             current["last_action_result"] = "Episode already complete."
             current["done"] = True
-            current["reward"] = 0.0
+            current["reward"] = final_score
             current["steps_remaining"] = 0
             return OnCallObservation(**current)
 
@@ -194,6 +197,10 @@ class OnCallHeroEnvironment(Environment):
 
         if done:
             self._hidden["is_done"] = True
+            # Replace step reward with final grader score so the done=True
+            # response carries a value strictly in (0.01, 0.99).
+            from oncall_hero.graders import grade
+            reward = grade(task_id, list(self._hidden["actions_taken"]), self._hidden)
 
         current = dict(self._hidden.get("current_obs", {}))
         current.update(obs_updates)
