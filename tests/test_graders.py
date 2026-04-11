@@ -606,7 +606,7 @@ class TestTaskHandlerTraps:
 # ------------------------------------------------------------------ #
 
 class TestGraderBounds:
-    """Fuzz the graders with extreme inputs and verify [0.0, 1.0] is always respected."""
+    """Fuzz the graders with extreme inputs and verify [0.01, 0.99] is always respected."""
 
     @pytest.mark.parametrize("grader,task_id", [
         (grade_task_easy, "missing_source_file"),

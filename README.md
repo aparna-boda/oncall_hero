@@ -11,7 +11,7 @@ OnCall Hero tackles this gap. It provides dense, step-by-step rewards for logica
 
 ## Task Overview
 
-The environment ships with 4 progressively harder incident tasks. Each task contains programmatic, deterministic graders mapping to a `[0.0, 1.0]` curve.
+The environment ships with 4 progressively harder incident tasks. Each task contains programmatic, deterministic graders mapping to a `[0.01, 0.99]` curve.
 
 | Task ID | Diff | Description | Baseline (Llama-3.3-70B) |
 |---------|----------|-------------|----------|
@@ -38,7 +38,7 @@ Data is progressively disclosed! The environment starts natively blank, and vari
 *   `incident_history` (Historical memory context for the pipeline)
 
 ### Reward Function
-We utilize a **Dense Reward Logic**. Scores aren't just given at the end. Sub-points are awarded (`+0.05`) for effectively checking logs before guessing. Massive penalties (`-0.40`) apply for blindly forcing reruns on broken codebase branches or taking destructive actions like jumping to the toxic `3.1.1` branch in Task 3. We cap everything cleanly bounded to `[0.0 - 1.0]`.
+We utilize a **Dense Reward Logic**. Scores aren't just given at the end. Sub-points are awarded (`+0.05`) for effectively checking logs before guessing. Massive penalties (`-0.40`) apply for blindly forcing reruns on broken codebase branches or taking destructive actions like jumping to the toxic `3.1.1` branch in Task 3. We cap everything cleanly bounded to `[0.01, 0.99]`.
 
 ---
 
@@ -60,7 +60,7 @@ cd oncall_hero && openenv validate
 openenv build -t oncall-hero:latest
 
 # Run the baseline inference
-cd .. && IMAGE_NAME=oncall-hero:latest python inference.py
+cd .. && LOCAL_IMAGE_NAME=oncall-hero:latest python inference.py
 ```
 
 ### 2. Local server (no Docker)
