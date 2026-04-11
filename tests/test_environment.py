@@ -140,7 +140,7 @@ class TestStepRouting:
         env.step(_act("fix_pipeline_config"))
         obs = env.step(_act("trigger_rerun"))
         assert obs.done is True
-        assert obs.reward == pytest.approx(0.65)
+        assert obs.reward == pytest.approx(0.99)  # grader score replaces step reward on done
 
     def test_medium_trigger_rerun_without_fix_fails(self):
         env = OnCallHeroEnvironment()
@@ -184,7 +184,7 @@ class TestDoneAndStepLimit:
         env.step(_act("trigger_rerun"))  # done=True here
         obs = env.step(_act("inspect_logs"))
         assert obs.done is True
-        assert obs.reward == pytest.approx(0.0)
+        assert obs.reward == pytest.approx(0.99)  # grader score returned for already-done episodes
         assert obs.steps_remaining == 0
         assert "Episode already complete" in obs.last_action_result
 
