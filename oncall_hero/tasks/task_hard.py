@@ -219,6 +219,7 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, bool]:
             updates["last_action_result"] = "FATAL: Skipped an SLA critical table. Irrecoverable data loss for reporting."
         else:
             updates["last_action_result"] = f"Skipped {action.target}."
+        done = True
 
     elif action_type == "fix_pipeline_config":
         updates["last_action_result"] = "Pipeline config wasn't the issue."
