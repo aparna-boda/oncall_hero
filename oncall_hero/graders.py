@@ -61,34 +61,27 @@ def grade_task_medium(actions_taken: List[str], hidden: Dict) -> float:
         if a in ["scale_up_executor"]:
             penalties += 0.10
             
-    return max(0.0, min(1.0, score - penalties))
+    return max(0.01, min(0.99, score - penalties))
 
 def grade_task_hard(actions_taken: List[str], hidden: Dict) -> float:
     """Grade a completed Task 3 (cascade_collapse) episode."""
-    # Root cause & Remediation
     score = 0.0
-    score += 0.08 if "inspect_logs" in actions_taken else 0.0 # deployment history
-    score += 0.08 if "check_dependencies" in actions_taken else 0.0 # blast radius
-    score += 0.08 if "profile_data" in actions_taken else 0.0 # bad JOIN confirmed
-    score += 0.06 if "check_resource_utilization" in actions_taken else 0.0 # DB CPU rules out infra
-    
-    # Negative filters for distractors
-    if "scale_up_executor" not in actions_taken:
-        score += 0.08
-    
-    orders_archive_altered = False
-    for a in actions_taken:
-        if a == "alter_table":
-            # Can't easily check target from just actions_taken strings, but assume we get penalty back from hidden state if we wanted
-            pass 
-            
-    # Assuming we track red herrings via actions string if we need, but PRD says agent does NOT alter_table on orders_archive:
-    if "alter_table" not in actions_taken:
-        score += 0.08
 
+    # Investigation: read deployment history + map blast radius (0.16)
+    score += 0.08 if "inspect_logs" in actions_taken else 0.0
+    score += 0.08 if "check_dependencies" in actions_taken else 0.0
+
+    # Avoided red-herring actions (0.10)
+    if "scale_up_executor" not in actions_taken:
+        score += 0.05
+    if "alter_table" not in actions_taken:
+        score += 0.05
+
+    # Correct rollback version (0.12)
     if hidden.get("t3_rollback_target") == "3.1.0":
-        score += 0.10
-        
+        score += 0.12
+
+    # SLA reruns in correct order — only correctly ordered entries land in t3_tables_rerun (0.54)
     tables_rerun = hidden.get("t3_tables_rerun", [])
     if len(tables_rerun) > 0 and tables_rerun[0] == "revenue_daily":
         score += 0.18
@@ -96,32 +89,31 @@ def grade_task_hard(actions_taken: List[str], hidden: Dict) -> float:
         score += 0.18
     if len(tables_rerun) > 2 and tables_rerun[2] == "marketing_segments":
         score += 0.18
-        
+
+    # Stakeholder notifications (0.10 + 0.05 bonus)
     notified = hidden.get("t3_notified_teams", set())
     if "sla" in notified:
         score += 0.10
     if "ads" in notified:
-        score += 0.10
+        score += 0.05  # bonus: acknowledged the separate OOM incident
+
+    # Max optimal (all above, with ads bonus): 1.05 → clamped to 0.99
+    # Max optimal (without ads bonus):         1.00 → clamped to 0.99
 
     penalties = 0.0
     if hidden.get("t3_rollback_target") == "3.1.1":
         penalties += 0.40
     if "scale_up_executor" in actions_taken:
         penalties += 0.20
-    
-    # Add negative penalties triggered from step (like -0.30 per wrong rerun target order, we could accumulate if needed,
-    # but we just do a rough check based on boolean states here).
-    if hidden.get("rerun_triggered") and not hidden.get("rerun_order_correct", True):
+    # Fires when agent did wrong-order reruns without completing the correct sequence
+    if hidden.get("rerun_order_correct") is False:
         penalties += 0.30
-        
     if "trigger_rerun" in actions_taken and not hidden.get("rollback_applied"):
         penalties += 0.30
-        
-    # SLA tables skip
     if "skip_task" in actions_taken:
         penalties += 0.30
 
-    return max(0.0, min(1.0, score - penalties))
+    return max(0.01, min(0.99, score - penalties))
 
 
 
@@ -228,7 +220,7 @@ def grade_task_easy(actions_taken: List[str], hidden: Dict) -> float:
         penalties += 0.50
 
     total = investigation + root_cause + remediation + efficiency + sla - penalties
-    return max(0.0, min(1.0, total))
+    return max(0.01, min(0.99, total))
 
 
 def grade_task_extreme(actions_taken: List[str], hidden: Dict) -> float:
@@ -277,7 +269,7 @@ def grade_task_extreme(actions_taken: List[str], hidden: Dict) -> float:
     if hidden.get("is_done") and not hidden.get("verification_done"):
         penalties += 0.20
         
-    return max(0.0, min(1.0, score - penalties))
+    return max(0.01, min(0.99, score - penalties))
 
 def grade(task_id: str, actions_taken: List[str], hidden: Dict) -> float:
     """
@@ -299,5 +291,5 @@ def grade(task_id: str, actions_taken: List[str], hidden: Dict) -> float:
         return grade_task_hard(actions_taken, hidden)
     elif task_id == "silent_data_corruption":
         return grade_task_extreme(actions_taken, hidden)
-    return 0.0
+    return 0.01
 

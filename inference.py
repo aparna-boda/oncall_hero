@@ -16,7 +16,7 @@ load_dotenv() # Load variables from .env!
 from oncall_hero.client import OnCallHeroEnv
 from oncall_hero.models import OnCallAction
 
-IMAGE_NAME = os.getenv("IMAGE_NAME")
+LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 API_KEY = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY")
 API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
 MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
@@ -174,8 +174,8 @@ async def run_task(task_id: str, client: OpenAI, env: OnCallHeroEnv) -> None:
                 messages.append({"role": "assistant", "content": raw_response})
                 messages.append({"role": "user", "content": f"Action result & observation:\n{format_observation(obs)}"})
 
-        score = sum(rewards) / MAX_TOTAL_REWARD if MAX_TOTAL_REWARD > 0 else 0.0
-        score = min(max(score, 0.0), 1.0)
+        score = sum(rewards) / MAX_TOTAL_REWARD if MAX_TOTAL_REWARD > 0 else 0.01
+        score = min(max(score, 0.01), 0.99)
         success = score >= SUCCESS_SCORE_THRESHOLD
 
     finally:
@@ -185,11 +185,11 @@ async def run_task(task_id: str, client: OpenAI, env: OnCallHeroEnv) -> None:
 async def _make_env() -> OnCallHeroEnv:
     """
     Connect to the environment.
-    - If IMAGE_NAME is set: spin up a local Docker container.
+    - If LOCAL_IMAGE_NAME is set: spin up a local Docker container.
     - Otherwise: connect directly via API_BASE_URL (HF Space or local server).
     """
-    if IMAGE_NAME:
-        return await OnCallHeroEnv.from_docker_image(IMAGE_NAME)
+    if LOCAL_IMAGE_NAME:
+        return await OnCallHeroEnv.from_docker_image(LOCAL_IMAGE_NAME)
     base_url = os.getenv("ENV_BASE_URL") or "http://localhost:8000"
     return OnCallHeroEnv(base_url=base_url)
 

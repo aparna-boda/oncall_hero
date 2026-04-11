@@ -175,13 +175,13 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, bool]:
                 "WARNING: Processing queue overloaded. SLA tables delayed further."
             )
         elif target in ["revenue_daily", "customer_summary", "marketing_segments"]:
-            hidden["t3_tables_rerun"].append(target)
             expected_order = ["revenue_daily", "customer_summary", "marketing_segments"]
-            current_idx = len(hidden["t3_tables_rerun"]) - 1
-            if current_idx < 3 and hidden["t3_tables_rerun"][current_idx] != expected_order[current_idx]:
+            current_idx = len(hidden["t3_tables_rerun"])  # next expected slot
+            if current_idx >= len(expected_order) or target != expected_order[current_idx]:
                 hidden["rerun_order_correct"] = False
                 updates["last_action_result"] = f"Rerun {target} out of order. Higher SLA priorities ignored!"
             else:
+                hidden["t3_tables_rerun"].append(target)  # only append when correct
                 updates["last_action_result"] = f"Rerun {target} successful."
                 if hidden["t3_tables_rerun"] == expected_order:
                     hidden["rerun_triggered"] = True

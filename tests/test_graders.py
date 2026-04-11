@@ -50,7 +50,7 @@ class TestGradeTaskEasy:
     def test_optimal_path(self):
         actions = ["inspect_logs", "fix_pipeline_config", "trigger_rerun"]
         hidden = {"inspect_logs_called": True}
-        assert grade_task_easy(actions, hidden) == pytest.approx(1.0)
+        assert grade_task_easy(actions, hidden) == pytest.approx(0.99)
 
     def test_rerun_before_fix_penalty(self):
         actions = ["inspect_logs", "trigger_rerun", "fix_pipeline_config"]
@@ -67,13 +67,10 @@ class TestGradeTaskEasy:
         assert score < 0.60
 
     def test_irrelevant_action_deducts_penalty(self):
-        # 3-step base (efficiency=0.10) vs 4-step with check_schema (efficiency=0.05 + 0.10 penalty = -0.15 total)
-        base = ["inspect_logs", "fix_pipeline_config", "trigger_rerun"]
+        # base = 1.00 unclamped → 0.99; with_irrelevant = 1.00 - 0.15 = 0.85 (efficiency drop + penalty)
         with_irrelevant = ["inspect_logs", "check_schema", "fix_pipeline_config", "trigger_rerun"]
         hidden = {"inspect_logs_called": True}
-        assert grade_task_easy(with_irrelevant, hidden) == pytest.approx(
-            grade_task_easy(base, hidden) - 0.15  # 0.10 irrelevant penalty + 0.05 efficiency drop
-        )
+        assert grade_task_easy(with_irrelevant, hidden) == pytest.approx(0.85)
 
     def test_multiple_irrelevant_actions_stack(self):
         actions = ["check_schema", "rollback_deployment", "fix_pipeline_config"]
@@ -82,15 +79,16 @@ class TestGradeTaskEasy:
         diff = grade_task_easy(single_irrelevant, hidden) - grade_task_easy(actions, hidden)
         assert diff == pytest.approx(0.10)
 
-    def test_skip_task_clamps_to_zero(self):
-        assert grade_task_easy(["skip_task"], {}) == pytest.approx(0.0)
+    def test_skip_task_clamps_to_min(self):
+        assert grade_task_easy(["skip_task"], {}) == pytest.approx(0.01)
 
     def test_efficiency_3_or_fewer_steps(self):
         actions_3 = ["inspect_logs", "fix_pipeline_config", "trigger_rerun"]
         # Use notify_stakeholder (no penalty) to pad to 5 steps without irrelevant-action penalties
         actions_5 = ["inspect_logs", "notify_stakeholder", "notify_stakeholder", "fix_pipeline_config", "trigger_rerun"]
         hidden = {"inspect_logs_called": True}
-        assert grade_task_easy(actions_3, hidden) - grade_task_easy(actions_5, hidden) == pytest.approx(0.10)
+        # actions_3 = 1.00 → clamped to 0.99; actions_5 = 0.90 (efficiency=0) → diff = 0.09
+        assert grade_task_easy(actions_3, hidden) - grade_task_easy(actions_5, hidden) == pytest.approx(0.09)
 
     def test_efficiency_exactly_4_steps(self):
         actions_4 = ["inspect_logs", "notify_stakeholder", "fix_pipeline_config", "trigger_rerun"]
@@ -101,11 +99,12 @@ class TestGradeTaskEasy:
 
     def test_efficiency_5_or_more_steps_zero(self):
         # 7 steps: efficiency=0.0; 3-step optimal: efficiency=0.10
+        # optimal clamped to 0.99; 7-step = 0.90 → diff = 0.09
         actions = ["inspect_logs"] * 5 + ["fix_pipeline_config", "trigger_rerun"]
         hidden = {"inspect_logs_called": True}
         score = grade_task_easy(actions, hidden)
         optimal = grade_task_easy(["inspect_logs", "fix_pipeline_config", "trigger_rerun"], {"inspect_logs_called": True})
-        assert optimal - score == pytest.approx(0.10)
+        assert optimal - score == pytest.approx(0.09)
 
     def test_sla_always_full_even_with_no_actions(self):
         score = grade_task_easy([], {})
@@ -149,14 +148,14 @@ class TestGradeTaskMedium:
 
     def test_optimal_path(self):
         actions = ["inspect_logs", "check_schema", "alter_table", "alter_table", "trigger_rerun"]
-        assert grade_task_medium(actions, self._optimal_hidden()) == pytest.approx(1.0)
+        assert grade_task_medium(actions, self._optimal_hidden()) == pytest.approx(0.99)
 
     def test_rollback_red_herring_penalty(self):
         actions = ["inspect_logs", "rollback_deployment", "trigger_rerun"]
         hidden = {"t2_discount_added": False, "t2_quantity_fixed": False}
         score = grade_task_medium(actions, hidden)
-        # 0.40 penalty for rollback; no schema fix bonuses
-        assert score == pytest.approx(0.0)
+        # 0.40 penalty for rollback; no schema fix bonuses → clamped to min
+        assert score == pytest.approx(0.01)
 
     def test_partial_fix_no_restore_bonus(self):
         hidden = {
@@ -174,9 +173,8 @@ class TestGradeTaskMedium:
         actions_clean = ["inspect_logs", "check_schema", "alter_table", "alter_table", "trigger_rerun"]
         actions_penalty = ["inspect_logs", "check_schema", "scale_up_executor", "alter_table", "alter_table", "trigger_rerun"]
         hidden = self._optimal_hidden()
-        assert grade_task_medium(actions_penalty, hidden) == pytest.approx(
-            grade_task_medium(actions_clean, hidden) - 0.10
-        )
+        # clean = 1.00 → clamped to 0.99; with penalty = 1.00 - 0.10 = 0.90 (not clamped)
+        assert grade_task_medium(actions_penalty, hidden) == pytest.approx(0.90)
 
     def test_check_schema_before_alter_bonus(self):
         # With check_schema before any alter_table
@@ -192,9 +190,9 @@ class TestGradeTaskMedium:
         # inspect(0.10) + no-rollback bonus(0.10) = 0.20
         assert score == pytest.approx(0.20)
 
-    def test_result_clamped_to_zero(self):
+    def test_result_clamped_to_min(self):
         actions = ["rollback_deployment", "scale_up_executor"]
-        assert grade_task_medium(actions, {}) == pytest.approx(0.0)
+        assert grade_task_medium(actions, {}) == pytest.approx(0.01)
 
     def test_result_never_above_one(self):
         actions = ["inspect_logs", "check_schema", "alter_table", "alter_table", "trigger_rerun"]
@@ -213,7 +211,7 @@ class TestGradeTaskHard:
             "trigger_rerun", "trigger_rerun", "trigger_rerun",
             "notify_stakeholder", "notify_stakeholder",
         ]
-        assert grade_task_hard(actions, _hard_optimal_hidden()) == pytest.approx(1.0)
+        assert grade_task_hard(actions, _hard_optimal_hidden()) == pytest.approx(0.99)
 
     def test_wrong_rollback_3_1_1_penalty(self):
         hidden = dict(_hard_optimal_hidden())
@@ -278,7 +276,8 @@ class TestGradeTaskHard:
         hidden_with = {"t3_rollback_target": "3.1.0", "t3_tables_rerun": [], "t3_notified_teams": {"sla", "ads"}, "rollback_applied": True}
         hidden_sla_only = {"t3_rollback_target": "3.1.0", "t3_tables_rerun": [], "t3_notified_teams": {"sla"}, "rollback_applied": True}
         actions = ["inspect_logs"]
-        assert grade_task_hard(actions, hidden_with) - grade_task_hard(actions, hidden_sla_only) == pytest.approx(0.10)
+        # ads notify is a 0.05 bonus (reduced from 0.10 to avoid over-specification)
+        assert grade_task_hard(actions, hidden_with) - grade_task_hard(actions, hidden_sla_only) == pytest.approx(0.05)
 
     def test_per_table_rerun_bonuses(self):
         base_hidden = {"t3_rollback_target": "3.1.0", "t3_tables_rerun": [], "t3_notified_teams": set(), "rollback_applied": True}
@@ -313,14 +312,14 @@ class TestGradeTaskHard:
 class TestGradeTaskExtreme:
     def test_optimal_path(self):
         actions = ["inspect_logs", "profile_data"]
-        assert grade_task_extreme(actions, _extreme_optimal_hidden()) == pytest.approx(1.0)
+        assert grade_task_extreme(actions, _extreme_optimal_hidden()) == pytest.approx(0.99)
 
     def test_stop_at_success_penalty(self):
         actions = ["inspect_logs"]
         hidden = {"is_done": True, "t4_notified_teams": set(), "rollback_applied": False}
         score = grade_task_extreme(actions, hidden)
-        # 0.80 penalty fires; only +0.10 for inspect_logs → net = -0.70 → clamped to 0.0
-        assert score == pytest.approx(0.0)
+        # 0.80 penalty fires; only +0.10 for inspect_logs → net = -0.70 → clamped to min
+        assert score == pytest.approx(0.01)
 
     def test_rerun_without_rollback_penalty(self):
         hidden = {"rollback_applied": False, "t4_notified_teams": set(), "is_done": False}
@@ -334,7 +333,8 @@ class TestGradeTaskExtreme:
         actions = ["inspect_logs", "profile_data"]
         score = grade_task_extreme(actions, hidden)
         optimal = grade_task_extreme(["inspect_logs", "profile_data"], _extreme_optimal_hidden())
-        assert optimal - score == pytest.approx(0.10 + 0.20)  # missing crm bonus + penalty
+        # optimal clamped to 0.99; without crm: 1.00 - 0.10 bonus - 0.20 penalty = 0.70 → diff = 0.29
+        assert optimal - score == pytest.approx(0.29)
 
     def test_missing_verification_penalty(self):
         hidden = dict(_extreme_optimal_hidden())
@@ -342,8 +342,8 @@ class TestGradeTaskExtreme:
         actions = ["inspect_logs", "profile_data"]
         score = grade_task_extreme(actions, hidden)
         optimal = grade_task_extreme(["inspect_logs", "profile_data"], _extreme_optimal_hidden())
-        # Loses 0.10 verify bonus + 0.20 penalty
-        assert optimal - score == pytest.approx(0.10 + 0.20)
+        # optimal clamped to 0.99; without verify: 1.00 - 0.10 bonus - 0.20 penalty = 0.70 → diff = 0.29
+        assert optimal - score == pytest.approx(0.29)
 
     def test_proactive_investigation_bonus(self):
         # Both inspect_logs AND profile_data → +0.05 bonus
@@ -404,8 +404,8 @@ class TestGradeDispatcher:
     def test_dispatches_extreme(self):
         assert grade("silent_data_corruption", [], {}) == grade_task_extreme([], {})
 
-    def test_unknown_task_returns_zero(self):
-        assert grade("nonexistent_task", [], {}) == pytest.approx(0.0)
+    def test_unknown_task_returns_min(self):
+        assert grade("nonexistent_task", [], {}) == pytest.approx(0.01)
 
     def test_dispatcher_passes_hidden_state(self):
         hidden = {"t2_discount_added": True, "t2_quantity_fixed": True, "schema_fixed": True, "rerun_triggered": True}
