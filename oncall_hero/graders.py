@@ -12,7 +12,7 @@ Each grader evaluates a completed episode across five dimensions:
     efficiency_score, sla_score
 
 Penalties are applied for wrong actions, premature reruns, and skips.
-Final score is clamped to [0.0, 1.0].
+Final score is clamped to [0.01, 0.99].
 """
 
 from typing import Dict, List
@@ -134,7 +134,7 @@ def grade_task_easy(actions_taken: List[str], hidden: Dict) -> float:
         hidden: Final hidden state dict from the environment.
 
     Returns:
-        Float in [0.0, 1.0].
+        Float in [0.01, 0.99].
     """
     # ------------------------------------------------------------------ #
     # Investigation score (max 0.20)
@@ -281,7 +281,7 @@ def grade(task_id: str, actions_taken: List[str], hidden: Dict) -> float:
         hidden: Final hidden state dict from the environment.
 
     Returns:
-        Float in [0.0, 1.0].
+        Float in [0.01, 0.99].
     """
     if task_id == "missing_source_file":
         return grade_task_easy(actions_taken, hidden)
