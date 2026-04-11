@@ -148,7 +148,7 @@ class TestStepRouting:
         env.step(_act("inspect_logs"))
         obs = env.step(_act("trigger_rerun"))
         assert obs.done is False
-        assert obs.reward == pytest.approx(-0.20)
+        assert obs.reward == pytest.approx(0.01)  # penalty clamped to min 0.01
 
     def test_hard_rollback_correct_version(self):
         env = OnCallHeroEnvironment()
@@ -162,7 +162,7 @@ class TestStepRouting:
         env.reset("cascade_collapse")
         env.step(_act("inspect_logs"))
         obs = env.step(_act("rollback_deployment", version="3.1.1"))
-        assert obs.reward == pytest.approx(-0.40)
+        assert obs.reward == pytest.approx(0.01)  # penalty clamped to min 0.01
 
     def test_extreme_rollback_correct_version(self):
         env = OnCallHeroEnvironment()

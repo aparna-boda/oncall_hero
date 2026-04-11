@@ -201,6 +201,10 @@ class OnCallHeroEnvironment(Environment):
             # response carries a value strictly in (0.01, 0.99).
             from oncall_hero.graders import grade
             reward = grade(task_id, list(self._hidden["actions_taken"]), self._hidden)
+        else:
+            # Clamp intermediate rewards to (0.01, 0.99) so every /step
+            # response satisfies the openenv strict (0, 1) range requirement.
+            reward = max(0.01, min(0.99, reward))
 
         current = dict(self._hidden.get("current_obs", {}))
         current.update(obs_updates)
