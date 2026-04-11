@@ -18,6 +18,24 @@ no task handler files need to change.
 
 from typing import Any, Dict
 
+
+def _normalize_team(team: str) -> str:
+    """Canonical team name used consistently across rewards, task handlers, and graders."""
+    team = str(team).strip().lower()
+    if "sla" in team:
+        return "sla"
+    if "analytics" in team:
+        return "analytics"
+    if "business" in team:
+        return "business"
+    if "ads" in team:
+        return "ads"
+    if "revenue" in team or "dashboard" in team:
+        return "revenue"
+    if "crm" in team or "upstream" in team:
+        return "crm"
+    return team
+
 # ------------------------------------------------------------------ #
 # Reward constants — single source of truth
 # ------------------------------------------------------------------ #
@@ -322,11 +340,9 @@ def _hard_remediation(
             if idx < len(_HARD_SLA_ORDER) and target == _HARD_SLA_ORDER[idx]:
                 return REMEDIATION_REWARDS["hard_sla_rerun_correct"]
     if action_type == "notify_stakeholder":
-        team = params.get("team", "").lower()
+        team = _normalize_team(params.get("team", ""))
         notified = hidden_before.get("t3_notified_teams", set())
-        if any(k in team for k in ("sla", "analytics", "business")) and "sla" not in notified:
-            return REMEDIATION_REWARDS["hard_notify_team"]
-        if "ads" in team and "ads" not in notified:
+        if team in ("sla", "analytics", "business", "ads") and team not in notified:
             return REMEDIATION_REWARDS["hard_notify_team"]
     return 0.0
 
@@ -395,11 +411,9 @@ def _extreme_remediation(
         if hidden_before.get("rollback_applied"):
             return REMEDIATION_REWARDS["extreme_rerun_success"]
     if action_type == "notify_stakeholder":
-        team = params.get("team", "").lower()
+        team = _normalize_team(params.get("team", ""))
         notified = hidden_before.get("t4_notified_teams", set())
-        if any(k in team for k in ("revenue", "dashboard")) and "revenue" not in notified:
-            return REMEDIATION_REWARDS["extreme_notify_team"]
-        if any(k in team for k in ("crm", "upstream")) and "crm" not in notified:
+        if team in ("revenue", "crm") and team not in notified:
             return REMEDIATION_REWARDS["extreme_notify_team"]
     return 0.0
 

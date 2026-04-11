@@ -65,7 +65,7 @@ SYSTEM_PROMPT = textwrap.dedent("""
         2. check_dependencies (to identify SLA-critical tables and blast radius)
         3. rollback_deployment with the LAST KNOWN GOOD version from deployment history (NOT the most recent — it may have bugs)
         4. trigger_rerun once per SLA-critical table, using the exact table name as target, in the order listed in the dependency map
-        5. notify_stakeholder with team="sla_team"
+        5. notify_stakeholder with team="sla"
     - For silent data corruption (pipeline shows SUCCESS but SLA is breached with no error): inspect_logs → profile_data (will reveal NULL rates) → rollback_deployment to last known good version → trigger_rerun → profile_data again to verify fix → notify_stakeholder with team="revenue_team" → notify_stakeholder with team="crm_team".
     - NEVER use check_schema or alter_table for deployment/cascading failures — they are irrelevant.
     - NEVER use scale_up_executor — resource issues are always red herrings.
@@ -175,7 +175,10 @@ async def run_task(task_id: str, client: OpenAI, env: OnCallHeroEnv) -> None:
                 messages.append({"role": "assistant", "content": raw_response})
                 messages.append({"role": "user", "content": f"Action result & observation:\n{format_observation(obs)}"})
 
-        score = sum(rewards) / MAX_TOTAL_REWARD if MAX_TOTAL_REWARD > 0 else 0.01
+        if result.done:
+            score = rewards[-1] if rewards else 0.01  # final grader score from environment
+        else:
+            score = max(rewards) if rewards else 0.01
         score = min(max(score, 0.01), 0.99)
         success = score >= SUCCESS_SCORE_THRESHOLD
 

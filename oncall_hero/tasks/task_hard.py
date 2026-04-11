@@ -198,21 +198,28 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, bool]:
             updates["last_action_result"] = f"Triggered rerun on {target}, but SLA tables are still waiting."
 
     elif action_type == "notify_stakeholder":
-        team = params.get("team", "").lower()
-        if any(k in team for k in ("sla", "analytics", "business")):
-            if "sla" not in hidden["t3_notified_teams"]:
-                hidden["t3_notified_teams"].add("sla")
-                updates["last_action_result"] = f"Notified {team} team about SLA status."
+        raw_team = str(params.get("team", "")).strip().lower()
+
+        def normalize_team(t: str) -> str:
+            if "sla" in t:
+                return "sla"
+            if "analytics" in t:
+                return "analytics"
+            if "business" in t:
+                return "business"
+            if "ads" in t:
+                return "ads"
+            return t
+
+        team = normalize_team(raw_team)
+        if team in ("sla", "analytics", "business", "ads"):
+            if team not in hidden["t3_notified_teams"]:
+                hidden["t3_notified_teams"].add(team)
+                updates["last_action_result"] = f"Notified {team} team."
             else:
                 updates["last_action_result"] = f"Already notified {team} team."
-        elif "ads" in team:
-            if "ads" not in hidden["t3_notified_teams"]:
-                hidden["t3_notified_teams"].add("ads")
-                updates["last_action_result"] = "Notified ads team about the standalone OOM issue."
-            else:
-                updates["last_action_result"] = "Already notified ads team."
         else:
-            updates["last_action_result"] = f"Notified {team}."
+            updates["last_action_result"] = f"Notified {raw_team}."
 
     elif action_type == "skip_task":
         if action.target in hidden.get("sla_critical_tables", []):
@@ -227,8 +234,14 @@ def handle_action(action: OnCallAction, hidden: dict) -> tuple[dict, bool]:
     else:
         updates["last_action_result"] = f"Unknown or invalid action: {action_type}."
 
-    # Check for resolution
-    if hidden.get("rerun_triggered") and "sla" in hidden["t3_notified_teams"]:
+    # Check for resolution — all conditions must be explicitly satisfied
+    if (
+        hidden.get("rollback_applied")
+        and hidden.get("rollback_version_correct")
+        and hidden.get("rerun_triggered")
+        and hidden.get("rerun_order_correct")
+        and "sla" in hidden.get("t3_notified_teams", set())
+    ):
         done = True
 
     return updates, done
