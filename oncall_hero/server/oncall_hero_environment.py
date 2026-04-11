@@ -118,7 +118,7 @@ class OnCallHeroEnvironment(Environment):
             }
 
         obs_data["done"] = False
-        obs_data["reward"] = 0.0
+        obs_data["reward"] = 0.01  # strictly in (0, 1) — reset reward is never 0.0
         self._hidden["current_obs"] = dict(obs_data)
 
         return OnCallObservation(**obs_data)

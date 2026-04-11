@@ -96,9 +96,9 @@ class TestReset:
         obs = OnCallHeroEnvironment().reset("missing_source_file")
         assert obs.done is False
 
-    def test_reset_reward_is_zero(self):
+    def test_reset_reward_is_in_range(self):
         obs = OnCallHeroEnvironment().reset("missing_source_file")
-        assert obs.reward == pytest.approx(0.0)
+        assert 0 < obs.reward < 1  # strictly in (0, 1) per openenv spec
 
 
 # ------------------------------------------------------------------ #
