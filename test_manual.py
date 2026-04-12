@@ -65,7 +65,7 @@ def run_task(label, module, actions, task_id=None):
     actions_taken = [a.action_type for a in actions[: len(rewards)]]
     raw = sum(rewards)
     final = grade(task_id, actions_taken, hidden)
-    clamped = max(0.0, min(1.0, raw))
+    clamped = max(0.01, min(0.99, raw))
 
     print(f"\n  Raw reward sum : {raw:.2f}  →  clamped: {clamped:.3f}")
     print(f"  Grader score   : {final:.3f}")
