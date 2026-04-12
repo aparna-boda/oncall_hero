@@ -105,8 +105,8 @@ def grade_task_hard(actions_taken: List[str], hidden: Dict) -> float:
         penalties += 0.40
     if "scale_up_executor" in actions_taken:
         penalties += 0.20
-    # Fires when agent did wrong-order reruns without completing the correct sequence
-    if hidden.get("rerun_order_correct") is False:
+    # Fires when agent attempted reruns but in the wrong order
+    if "trigger_rerun" in actions_taken and hidden.get("rerun_order_correct") is False:
         penalties += 0.30
     if "trigger_rerun" in actions_taken and not hidden.get("rollback_applied"):
         penalties += 0.30
