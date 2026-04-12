@@ -103,7 +103,7 @@ async def run_task(task_id: str, client: OpenAI, env: OnCallHeroEnv) -> None:
 
     rewards: List[float] = []
     steps_taken = 0
-    score = 0.0
+    score = 0.01  # default strictly > 0 in case of early exception
     success = False
 
     try:
