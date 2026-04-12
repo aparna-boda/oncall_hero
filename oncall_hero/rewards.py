@@ -128,8 +128,8 @@ PENALTY_VALUES: Dict[str, float] = {
 # ------------------------------------------------------------------ #
 
 def normalize_reward(raw: float) -> float:
-    """Clamp a raw step reward to [-1.0, 1.0]."""
-    return max(-1.0, min(1.0, raw))
+    """Clamp a raw step reward to (0.01, 0.99) — strict (0,1) range required by validator."""
+    return max(0.01, min(0.99, raw))
 
 
 # ------------------------------------------------------------------ #
