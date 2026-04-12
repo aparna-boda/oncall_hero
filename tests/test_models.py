@@ -152,14 +152,14 @@ class TestOnCallObservation:
 # ------------------------------------------------------------------ #
 
 class TestOnCallState:
-    def test_all_score_defaults_zero(self):
+    def test_all_score_defaults_min(self):
         s = OnCallState()
-        assert s.investigation_score == 0.0
-        assert s.root_cause_score == 0.0
-        assert s.remediation_score == 0.0
-        assert s.efficiency_score == 0.0
-        assert s.sla_score == 0.0
-        assert s.penalty_total == 0.0
+        assert s.investigation_score == 0.01
+        assert s.root_cause_score == 0.01
+        assert s.remediation_score == 0.01
+        assert s.efficiency_score == 0.01
+        assert s.sla_score == 0.01
+        assert s.penalty_total == 0.01
 
     def test_boolean_defaults(self):
         s = OnCallState()

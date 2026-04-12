@@ -1,3 +1,12 @@
+---
+title: OnCall Hero
+emoji: 🦸
+colorFrom: blue
+colorTo: purple
+sdk: docker
+pinned: false
+---
+
 # OnCall Hero 🦸‍♂️
 
 An OpenEnv environment that simulates production data pipeline incidents. AI agents act as an on-call data engineer — receiving alerts, reading error logs, inspecting table metadata, diagnosing root causes, and applying remediation actions to resolve incidents under pressure.

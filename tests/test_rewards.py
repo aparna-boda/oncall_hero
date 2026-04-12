@@ -29,20 +29,20 @@ class TestNormalizeReward:
     def test_value_within_range_unchanged(self):
         assert normalize_reward(0.5) == pytest.approx(0.5)
 
-    def test_zero_unchanged(self):
-        assert normalize_reward(0.0) == pytest.approx(0.0)
+    def test_zero_clamped_to_min(self):
+        assert normalize_reward(0.0) == pytest.approx(0.01)
 
-    def test_positive_clamped_to_one(self):
-        assert normalize_reward(2.0) == pytest.approx(1.0)
+    def test_positive_clamped_to_max(self):
+        assert normalize_reward(2.0) == pytest.approx(0.99)
 
-    def test_negative_clamped_to_minus_one(self):
-        assert normalize_reward(-5.0) == pytest.approx(-1.0)
+    def test_negative_clamped_to_min(self):
+        assert normalize_reward(-5.0) == pytest.approx(0.01)
 
-    def test_exactly_one_unchanged(self):
-        assert normalize_reward(1.0) == pytest.approx(1.0)
+    def test_exactly_one_clamped_to_max(self):
+        assert normalize_reward(1.0) == pytest.approx(0.99)
 
-    def test_exactly_minus_one_unchanged(self):
-        assert normalize_reward(-1.0) == pytest.approx(-1.0)
+    def test_exactly_minus_one_clamped_to_min(self):
+        assert normalize_reward(-1.0) == pytest.approx(0.01)
 
 
 # ------------------------------------------------------------------ #
@@ -569,9 +569,9 @@ class TestPenaltyExtreme:
 # ------------------------------------------------------------------ #
 
 class TestComputeStepReward:
-    def test_unknown_task_returns_zero(self):
+    def test_unknown_task_returns_min(self):
         r = compute_step_reward("inspect_logs", "pipeline", {}, {}, {}, "unknown_task", False)
-        assert r == pytest.approx(0.0)
+        assert r == pytest.approx(0.01)
 
     def test_easy_optimal_step1_inspect_logs(self):
         r = compute_step_reward("inspect_logs", "pipeline", {}, {}, {}, "missing_source_file", False)
@@ -593,13 +593,13 @@ class TestComputeStepReward:
         hidden = {"config_fixed": False}
         r = compute_step_reward("trigger_rerun", "pipeline", {}, hidden, hidden,
                                 "missing_source_file", False)
-        assert r == pytest.approx(-0.30)
+        assert r == pytest.approx(0.01)  # clamped from -0.30
 
     def test_hard_rollback_311_penalty_dominates(self):
-        # remediation = 0.0 (wrong version), penalty = -0.40 → net = -0.40
+        # remediation = 0.0 (wrong version), penalty = -0.40 → net clamped to 0.01
         r = compute_step_reward("rollback_deployment", "pipeline", {"version": "3.1.1"},
                                 {}, {}, "cascade_collapse", False)
-        assert r == pytest.approx(-0.40)
+        assert r == pytest.approx(0.01)  # clamped from -0.40
 
     def test_hard_rollback_310_reward(self):
         # remediation = 0.20, penalty = 0.0 → net = 0.20
@@ -610,28 +610,27 @@ class TestComputeStepReward:
     def test_medium_rollback_heavy_penalty(self):
         r = compute_step_reward("rollback_deployment", "pipeline", {},
                                 {}, {}, "schema_drift_bigquery", False)
-        assert r == pytest.approx(-0.40)
+        assert r == pytest.approx(0.01)  # clamped from -0.40
 
     def test_extreme_wrong_rollback_penalty(self):
         r = compute_step_reward("rollback_deployment", "pipeline", {"version": "4.2.0"},
                                 {}, {}, "silent_data_corruption", False)
-        assert r == pytest.approx(-0.10)
+        assert r == pytest.approx(0.01)  # clamped from -0.10
 
     def test_extreme_correct_rollback_reward(self):
         r = compute_step_reward("rollback_deployment", "pipeline", {"version": "4.1.5"},
                                 {}, {}, "silent_data_corruption", False)
         assert r == pytest.approx(0.15)
 
-    def test_result_clamped_above_one(self):
-        # investigation + remediation stacking can't exceed 1.0
+    def test_result_clamped_above_max(self):
+        # investigation + remediation stacking can't exceed 0.99
         hidden = {"config_fixed": True}
-        # trigger_rerun on easy gives +0.65 (no investigation for trigger_rerun)
         r = compute_step_reward("trigger_rerun", "pipeline", {}, hidden, hidden,
                                 "missing_source_file", True)
-        assert r <= 1.0
+        assert r <= 0.99
 
-    def test_result_clamped_below_minus_one(self):
-        # Even the heaviest combos won't drop below -1.0
+    def test_result_clamped_below_min(self):
+        # Even the heaviest combos are clamped to 0.01
         r = compute_step_reward("skip_task", "pipeline", {}, {}, {},
                                 "silent_data_corruption", True)
-        assert r >= -1.0
+        assert r >= 0.01

@@ -447,23 +447,23 @@ class TestTaskHandlerTraps:
     def test_easy_rollback_is_irrelevant(self):
         from oncall_hero.tasks.task_easy import handle_action
         _, reward, _, _ = self._run(handle_action, self._act("rollback_deployment", version="1.0.0"), {}, "missing_source_file")
-        assert reward < 0
+        assert reward == pytest.approx(0.01)  # penalised → clamped to min
 
     def test_easy_scale_up_is_irrelevant(self):
         from oncall_hero.tasks.task_easy import handle_action
         _, reward, _, _ = self._run(handle_action, self._act("scale_up_executor"), {}, "missing_source_file")
-        assert reward < 0
+        assert reward == pytest.approx(0.01)  # penalised → clamped to min
 
     def test_easy_skip_task_done(self):
         from oncall_hero.tasks.task_easy import handle_action
         _, reward, done, _ = self._run(handle_action, self._act("skip_task"), {}, "missing_source_file")
         assert done is True
-        assert reward < 0
+        assert reward == pytest.approx(0.01)  # penalised → clamped to min
 
     def test_easy_rerun_before_fix_penalised(self):
         from oncall_hero.tasks.task_easy import handle_action
         _, reward, _, _ = self._run(handle_action, self._act("trigger_rerun"), {"inspect_logs_called": True}, "missing_source_file")
-        assert reward < 0
+        assert reward == pytest.approx(0.01)  # penalised → clamped to min
 
     def test_easy_fix_then_rerun_succeeds(self):
         from oncall_hero.tasks.task_easy import handle_action
@@ -483,52 +483,52 @@ class TestTaskHandlerTraps:
     def test_medium_alter_without_check_schema_penalised(self):
         from oncall_hero.tasks.task_medium import handle_action
         _, reward, _, _ = self._run(handle_action, self._act("alter_table", column="quantity", type="BIGINT"), {}, "schema_drift_bigquery")
-        assert reward < 0
+        assert reward == pytest.approx(0.01)  # penalised → clamped to min
 
     def test_medium_alter_wrong_type_penalised(self):
         from oncall_hero.tasks.task_medium import handle_action
         _, reward, _, _ = self._run(handle_action, self._act("alter_table", column="quantity", type="INT"), {"check_schema_called": True, "t2_discount_added": False, "t2_quantity_fixed": False}, "schema_drift_bigquery")
-        assert reward < 0
+        assert reward == pytest.approx(0.01)  # penalised → clamped to min
 
     def test_medium_alter_unknown_column_penalised(self):
         from oncall_hero.tasks.task_medium import handle_action
         _, reward, _, _ = self._run(handle_action, self._act("alter_table", column="nonexistent", type="STRING"), {"check_schema_called": True, "t2_discount_added": False, "t2_quantity_fixed": False}, "schema_drift_bigquery")
-        assert reward < 0
+        assert reward == pytest.approx(0.01)  # penalised → clamped to min
 
     def test_medium_rollback_red_herring_penalised(self):
         from oncall_hero.tasks.task_medium import handle_action
         _, reward, _, _ = self._run(handle_action, self._act("rollback_deployment"), {}, "schema_drift_bigquery")
-        assert reward == pytest.approx(-0.40)
+        assert reward == pytest.approx(0.01)  # clamped from -0.40
 
     def test_medium_skip_task_terminal_and_penalised(self):
         from oncall_hero.tasks.task_medium import handle_action
         _, reward, done, _ = self._run(handle_action, self._act("skip_task"), {}, "schema_drift_bigquery")
         assert done is True
-        assert reward < 0
+        assert reward == pytest.approx(0.01)  # penalised → clamped to min
 
     def test_medium_rerun_with_partial_fix_fails(self):
         from oncall_hero.tasks.task_medium import handle_action
         hidden = {"check_schema_called": True, "t2_discount_added": True, "t2_quantity_fixed": False}
         _, reward, done, _ = self._run(handle_action, self._act("trigger_rerun"), hidden, "schema_drift_bigquery")
         assert done is False
-        assert reward < 0
+        assert reward == pytest.approx(0.01)  # penalised → clamped to min
 
     # --- Hard traps ---
     def test_hard_rollback_3_1_1_catastrophic(self):
         from oncall_hero.tasks.task_hard import handle_action
         _, reward, _, _ = self._run(handle_action, self._act("rollback_deployment", version="3.1.1"), {}, "cascade_collapse")
-        assert reward == pytest.approx(-0.40)
+        assert reward == pytest.approx(0.01)  # clamped from -0.40
 
     def test_hard_rerun_before_rollback_penalised(self):
         from oncall_hero.tasks.task_hard import handle_action
         _, reward, _, _ = self._run(handle_action, self._act("trigger_rerun", target="revenue_daily"), {}, "cascade_collapse")
-        assert reward < 0
+        assert reward == pytest.approx(0.01)  # penalised → clamped to min
 
     def test_hard_rerun_all_tables_penalised(self):
         from oncall_hero.tasks.task_hard import handle_action
         hidden = {"rollback_applied": True, "rollback_version_correct": True, "t3_rollback_target": "3.1.0", "t3_tables_rerun": [], "t3_notified_teams": set()}
         _, reward, _, _ = self._run(handle_action, self._act("trigger_rerun", target="all"), hidden, "cascade_collapse")
-        assert reward < 0
+        assert reward == pytest.approx(0.01)  # penalised → clamped to min
 
     def test_hard_rerun_wrong_order_penalised(self):
         from oncall_hero.tasks.task_hard import handle_action
@@ -537,35 +537,35 @@ class TestTaskHandlerTraps:
             "t3_rollback_target": "3.1.0", "t3_tables_rerun": [], "t3_notified_teams": set(),
         }
         _, reward, _, _ = self._run(handle_action, self._act("trigger_rerun", target="customer_summary"), hidden, "cascade_collapse")
-        assert reward < 0
+        assert reward == pytest.approx(0.01)  # penalised → clamped to min
 
     def test_hard_skip_sla_table_penalised(self):
         from oncall_hero.tasks.task_hard import handle_action
         hidden = {"sla_critical_tables": ["revenue_daily", "customer_summary", "marketing_segments"], "t3_rollback_target": None, "t3_tables_rerun": [], "t3_notified_teams": set()}
         _, reward, _, _ = self._run(handle_action, self._act("skip_task", target="revenue_daily"), hidden, "cascade_collapse")
-        assert reward < 0
+        assert reward == pytest.approx(0.01)  # penalised → clamped to min
 
     def test_hard_scale_up_executor_penalised(self):
         from oncall_hero.tasks.task_hard import handle_action
         _, reward, _, _ = self._run(handle_action, self._act("scale_up_executor"), {}, "cascade_collapse")
-        assert reward < 0
+        assert reward == pytest.approx(0.01)  # penalised → clamped to min
 
     # --- Extreme traps ---
     def test_extreme_rerun_before_rollback_penalised(self):
         from oncall_hero.tasks.task_extreme import handle_action
         _, reward, _, _ = self._run(handle_action, self._act("trigger_rerun"), {}, "silent_data_corruption")
-        assert reward < 0
+        assert reward == pytest.approx(0.01)  # penalised → clamped to min
 
     def test_extreme_wrong_rollback_version_penalised(self):
         from oncall_hero.tasks.task_extreme import handle_action
         _, reward, _, _ = self._run(handle_action, self._act("rollback_deployment", version="4.2.0"), {}, "silent_data_corruption")
-        assert reward < 0
+        assert reward == pytest.approx(0.01)  # penalised → clamped to min
 
     def test_extreme_skip_task_terminal_and_penalised(self):
         from oncall_hero.tasks.task_extreme import handle_action
         _, reward, done, _ = self._run(handle_action, self._act("skip_task"), {}, "silent_data_corruption")
         assert done is True
-        assert reward < 0
+        assert reward == pytest.approx(0.01)  # penalised → clamped to min
 
     def test_extreme_profile_data_post_fix_gives_verify_reward(self):
         from oncall_hero.tasks.task_extreme import handle_action
@@ -589,7 +589,7 @@ class TestTaskHandlerTraps:
         ha = copy.deepcopy(hidden)
         _, done = handle_action(self._act("notify_stakeholder", team="revenue_team"), ha)
         reward = compute_step_reward("notify_stakeholder", "pipeline", {"team": "revenue_team"}, hb, ha, "silent_data_corruption", done)
-        assert reward == pytest.approx(0.0)
+        assert reward == pytest.approx(0.01)  # no new reward → clamped to min
 
     def test_extreme_done_only_after_verify_and_both_notified(self):
         from oncall_hero.tasks.task_extreme import handle_action
