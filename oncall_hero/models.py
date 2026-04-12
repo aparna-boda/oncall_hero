@@ -14,7 +14,7 @@ An AI agent acts as an on-call data engineer.
 from typing import Any, Dict, List
 
 from openenv.core.env_server.types import Action, Observation, State
-from pydantic import Field
+from pydantic import Field, field_validator
 
 VALID_ACTION_TYPES = [
     "inspect_logs",
@@ -39,6 +39,13 @@ class OnCallAction(Action):
     target: str = Field(..., description="Pipeline or table being acted on")
     parameters: Dict[str, Any] = Field(default_factory=dict, description="Action-specific parameters")
     justification: str = Field(default="", description="Agent reasoning for this action")
+
+    @field_validator("action_type")
+    @classmethod
+    def validate_action_type(cls, v: str) -> str:
+        if v not in VALID_ACTION_TYPES:
+            raise ValueError(f"Invalid action_type '{v}'. Must be one of: {VALID_ACTION_TYPES}")
+        return v
 
 
 class OnCallObservation(Observation):

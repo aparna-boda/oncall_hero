@@ -23,12 +23,12 @@ OnCall Hero tackles this gap. It provides dense, step-by-step rewards for logica
 
 The environment ships with 4 progressively harder incident tasks. Each task contains programmatic, deterministic graders mapping to a `[0.01, 0.99]` curve.
 
-| Task ID | Diff | Description | Baseline (Llama-3.3-70B) |
-|---------|----------|-------------|----------|
-| `missing_source_file` | **Easy** | Filename convention mismatch leading to FileNotFoundError. Includes a slow-query distractor warning. Agent must update the pipeline config. | 0.950 |
-| `schema_drift_bigquery` | **Medium** | Upstream tables underwent silent column drops and type drifts. Agent must dodge a decoy code deployment to correctly run two `alter_table` commands. | 0.500 |
-| `cascade_collapse` | **Hard** | A bad `JOIN` deployed in version `3.1.2` corrupts a master table, cascading into 3 downstream SLA breaches. Agent must rollback selectively to `3.1.0` (avoiding the toxic `3.1.1` NULL bug variant) and orchestrate sequential reruns while ignoring a noisy neighbor OOM crash. | 0.500 |
-| `silent_data_corruption` | **Extreme** | The pipeline reports a green `SUCCESS` flag, but upstream APIs dropped `price` variables to 52% NULLs. No literal error occurs. The agent must proactively profile data metrics and apply fixes before verifying. | 0.950 |
+| Task ID | Diff | Description | Optimal Score | Baseline (Llama-3.3-70B) |
+|---------|------|-------------|:---:|:---:|
+| `missing_source_file` | **Easy** | Filename convention mismatch leading to FileNotFoundError. Includes a slow-query distractor warning. Agent must update the pipeline config. | 0.990 | 0.990 |
+| `schema_drift_bigquery` | **Medium** | Upstream tables underwent silent column drops and type drifts. Agent must dodge a decoy code deployment to correctly run two `alter_table` commands. | 0.990 | 0.200 |
+| `cascade_collapse` | **Hard** | A bad `JOIN` deployed in version `3.1.2` corrupts a master table, cascading into 3 downstream SLA breaches. Agent must rollback selectively to `3.1.0` (avoiding the toxic `3.1.1` NULL bug variant) and orchestrate sequential reruns while ignoring a noisy neighbor OOM crash. | 0.990 | 0.010 |
+| `silent_data_corruption` | **Extreme** | The pipeline reports a green `SUCCESS` flag, but upstream APIs dropped `price` variables to 52% NULLs. No literal error occurs. The agent must proactively profile data metrics and apply fixes before verifying. | 0.990 | 0.010 |
 
 ---
 
@@ -63,14 +63,17 @@ export OPENAI_API_KEY="your-groq-key"
 export API_BASE_URL="https://api.groq.com/openai/v1"
 export MODEL_NAME="llama-3.3-70b-versatile"
 
-# Validate the environment spec
-cd oncall_hero && openenv validate
+# Validate the environment spec (from repo root)
+openenv validate
 
 # Build the Docker image
-openenv build -t oncall-hero:latest
+docker build -t oncall-hero:latest .
 
-# Run the baseline inference
-cd .. && LOCAL_IMAGE_NAME=oncall-hero:latest python inference.py
+# Run the baseline inference against local Docker container
+LOCAL_IMAGE_NAME=oncall-hero:latest python inference.py
+
+# Or run against the live HF Space
+ENV_BASE_URL=https://aparna05-oncall-hero.hf.space python inference.py
 ```
 
 ### 2. Local server (no Docker)
